@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
+// @ts-expect-error - NextAuth getToken import issue
 import { getToken } from 'next-auth/jwt'
-import { authOptions } from '../auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth'
+
+interface GmailHeader {
+  name: string;
+  value: string;
+}
+
+interface GmailMessage {
+  id: string;
+  threadId: string;
+  labelIds?: string[];
+  snippet?: string;
+  payload?: {
+    headers?: GmailHeader[];
+  };
+  internalDate?: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     
     // Use session access token if available, otherwise token
-    const accessToken = session?.accessToken || token?.accessToken
+    const accessToken = (session as { accessToken?: string })?.accessToken || token?.accessToken
     
     if (!accessToken) {
       return NextResponse.json({ 
@@ -66,7 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch details for each message
-    const emailPromises = messagesData.messages.map(async (message: any) => {
+    const emailPromises = messagesData.messages.map(async (message: { id: string; threadId: string }) => {
       const messageResponse = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
         {
@@ -81,13 +98,13 @@ export async function GET(request: NextRequest) {
         return null
       }
       
-      const messageData = await messageResponse.json()
+      const messageData: GmailMessage = await messageResponse.json()
       
       // Extract headers
       const headers = messageData.payload?.headers || []
-      const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject'
-      const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown Sender'
-      const date = headers.find((h: any) => h.name === 'Date')?.value || ''
+      const subject = headers.find((h: GmailHeader) => h.name === 'Subject')?.value || 'No Subject'
+      const from = headers.find((h: GmailHeader) => h.name === 'From')?.value || 'Unknown Sender'
+      const date = headers.find((h: GmailHeader) => h.name === 'Date')?.value || ''
       
       return {
         id: messageData.id,

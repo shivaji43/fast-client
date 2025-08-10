@@ -1,5 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
+// @ts-expect-error - NextAuth getToken import issue
 import { getToken } from 'next-auth/jwt'
+
+interface GmailHeader {
+  name: string;
+  value: string;
+}
+
+interface GmailPayload {
+  headers?: GmailHeader[];
+  parts?: GmailPayload[];
+  body?: {
+    data?: string;
+    size?: number;
+    attachmentId?: string;
+  };
+  mimeType?: string;
+  filename?: string;
+}
+
+interface GmailMessage {
+  id: string;
+  threadId: string;
+  labelIds?: string[];
+  snippet?: string;
+  payload?: GmailPayload;
+  internalDate?: string;
+}
+
+interface AttachmentInfo {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
 
 export async function GET(
   request: NextRequest,
@@ -54,15 +88,15 @@ export async function GET(
           throw new Error(`Gmail API error: ${metadataResponse.status} - ${metadataError.error?.message || 'Unknown error'}`)
         }
         
-        const metadataMessageData = await metadataResponse.json()
+        const metadataMessageData: GmailMessage = await metadataResponse.json()
         
         // Extract headers
         const headers = metadataMessageData.payload?.headers || []
-        const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject'
-        const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown Sender'
-        const to = headers.find((h: any) => h.name === 'To')?.value || ''
-        const cc = headers.find((h: any) => h.name === 'Cc')?.value || ''
-        const date = headers.find((h: any) => h.name === 'Date')?.value || ''
+        const subject = headers.find((h: GmailHeader) => h.name === 'Subject')?.value || 'No Subject'
+        const from = headers.find((h: GmailHeader) => h.name === 'From')?.value || 'Unknown Sender'
+        const to = headers.find((h: GmailHeader) => h.name === 'To')?.value || ''
+        const cc = headers.find((h: GmailHeader) => h.name === 'Cc')?.value || ''
+        const date = headers.find((h: GmailHeader) => h.name === 'Date')?.value || ''
         
         // For metadata format, use snippet with upgrade message
         const body = metadataMessageData.snippet ? 
@@ -92,15 +126,15 @@ export async function GET(
       throw new Error(`Gmail API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`)
     }
 
-    const messageData = await response.json()
+    const messageData: GmailMessage = await response.json()
     
     // Extract headers
     const headers = messageData.payload?.headers || []
-    const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject'
-    const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown Sender'
-    const to = headers.find((h: any) => h.name === 'To')?.value || ''
-    const cc = headers.find((h: any) => h.name === 'Cc')?.value || ''
-    const date = headers.find((h: any) => h.name === 'Date')?.value || ''
+    const subject = headers.find((h: GmailHeader) => h.name === 'Subject')?.value || 'No Subject'
+    const from = headers.find((h: GmailHeader) => h.name === 'From')?.value || 'Unknown Sender'
+    const to = headers.find((h: GmailHeader) => h.name === 'To')?.value || ''
+    const cc = headers.find((h: GmailHeader) => h.name === 'Cc')?.value || ''
+    const date = headers.find((h: GmailHeader) => h.name === 'Date')?.value || ''
     
     // Extract email body
     let body = ''
@@ -108,7 +142,7 @@ export async function GET(
     
 
     
-    const extractBody = (payload: any): void => {
+    const extractBody = (payload: GmailPayload): void => {
       if (payload.parts) {
         // Multipart message - look for text parts
         for (const part of payload.parts) {
@@ -149,7 +183,7 @@ export async function GET(
       }
     }
     
-    extractBody(messageData.payload)
+    extractBody(messageData.payload!)
     
     // Fallback to snippet if no body found
     if (!body) {
@@ -157,15 +191,15 @@ export async function GET(
     }
 
     // Extract attachments info
-    const attachments: any[] = []
-    const extractAttachments = (payload: any): void => {
+    const attachments: AttachmentInfo[] = []
+    const extractAttachments = (payload: GmailPayload): void => {
       if (payload.parts) {
         for (const part of payload.parts) {
           if (part.filename && part.body?.attachmentId) {
             attachments.push({
               id: part.body.attachmentId,
               filename: part.filename,
-              mimeType: part.mimeType,
+              mimeType: part.mimeType || 'application/octet-stream',
               size: part.body.size || 0
             })
           } else if (part.parts) {
@@ -175,7 +209,7 @@ export async function GET(
       }
     }
     
-    extractAttachments(messageData.payload)
+    extractAttachments(messageData.payload!)
 
     const emailDetail = {
       id: messageData.id,

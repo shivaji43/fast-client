@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ArrowLeft, Download, Reply, Forward, Archive, Trash2, MoreVertical } from 'lucide-react'
 
 interface EmailDetail {
@@ -37,13 +37,7 @@ export default function EmailDetail({ messageId, onClose }: EmailDetailProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (messageId) {
-      fetchEmailDetail(messageId)
-    }
-  }, [messageId])
-
-  const fetchEmailDetail = async (id: string) => {
+  const fetchEmailDetail = useCallback(async (id: string) => {
     setLoading(true)
     setError(null)
     
@@ -67,7 +61,13 @@ export default function EmailDetail({ messageId, onClose }: EmailDetailProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (messageId) {
+      fetchEmailDetail(messageId)
+    }
+  }, [messageId, fetchEmailDetail])
 
   const markAsRead = async (id: string) => {
     try {

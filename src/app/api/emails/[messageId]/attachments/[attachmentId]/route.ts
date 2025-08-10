@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+// @ts-expect-error - NextAuth getToken import issue
 import { getToken } from 'next-auth/jwt'
 
 export async function GET(
