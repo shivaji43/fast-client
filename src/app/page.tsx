@@ -17,7 +17,7 @@ export default function Home() {
 
   if (session) {
     return (
-      <div className="h-screen overflow-hidden">
+      <div className="h-screen">
         <EmailList />
       </div>
     );

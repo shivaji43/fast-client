@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const pageToken = searchParams.get('pageToken') || ''
-    const maxResults = 15
+    const batchSize = parseInt(searchParams.get('batchSize') || '15')
+    const maxResults = Math.min(Math.max(batchSize, 1), 50) // Limit between 1-50 for API safety
 
     // Build Gmail API URL
     const gmailUrl = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')

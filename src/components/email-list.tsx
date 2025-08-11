@@ -34,12 +34,20 @@ export default function EmailList() {
   const [showCompose, setShowCompose] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
+  const [backgroundFetching, setBackgroundFetching] = useState(false)
+  const [totalFetched, setTotalFetched] = useState(0)
+  const MAX_EMAILS = 120
+  const INITIAL_BATCH_SIZE = 15
+  const SUBSEQUENT_BATCH_SIZE = 30
 
-  const fetchEmails = async (pageToken?: string) => {
+  const fetchEmails = async (pageToken?: string, batchSize?: number, isBackground = false) => {
     try {
       const url = new URL('/api/emails', window.location.origin)
       if (pageToken) {
         url.searchParams.append('pageToken', pageToken)
+      }
+      if (batchSize) {
+        url.searchParams.append('batchSize', batchSize.toString())
       }
 
       const response = await fetch(url.toString())
@@ -52,10 +60,13 @@ export default function EmailList() {
       
       if (pageToken) {
         setEmails(prev => [...prev, ...data.emails])
+        setTotalFetched(prev => prev + data.emails.length)
       } else {
         setEmails(data.emails)
+        setTotalFetched(data.emails.length)
       }
       
+      // Always set nextPageToken from API response
       setNextPageToken(data.nextPageToken)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch emails')
@@ -65,21 +76,38 @@ export default function EmailList() {
   useEffect(() => {
     if (session) {
       setLoading(true)
-      fetchEmails().finally(() => setLoading(false))
+      // Load initial batch of 15 emails
+      fetchEmails(undefined, INITIAL_BATCH_SIZE).finally(() => setLoading(false))
     }
   }, [session])
+
+  // Background fetching effect
+  useEffect(() => {
+    if (session && !loading && !backgroundFetching && nextPageToken && totalFetched < MAX_EMAILS) {
+      const timer = setTimeout(() => {
+        setBackgroundFetching(true)
+        fetchEmails(nextPageToken, SUBSEQUENT_BATCH_SIZE, true).finally(() => {
+          setBackgroundFetching(false)
+        })
+      }, 2000) // Wait 2 seconds before starting background fetch
+
+      return () => clearTimeout(timer)
+    }
+  }, [session, loading, backgroundFetching, nextPageToken, totalFetched])
 
   const loadMore = async () => {
     if (!nextPageToken || loadingMore) return
     
     setLoadingMore(true)
-    await fetchEmails(nextPageToken)
+    await fetchEmails(nextPageToken, SUBSEQUENT_BATCH_SIZE)
     setLoadingMore(false)
   }
 
   const refreshEmails = async () => {
     setRefreshing(true)
-    await fetchEmails()
+    setTotalFetched(0)
+    setBackgroundFetching(false)
+    await fetchEmails(undefined, INITIAL_BATCH_SIZE)
     setRefreshing(false)
   }
 
@@ -151,13 +179,20 @@ export default function EmailList() {
 
   return (
     <>
-      <div className="flex h-[calc(100vh-80px)] overflow-hidden">
+      <div className="flex h-screen">
         {/* Email List Panel - Left Side */}
         <div className={`${selectedEmailId ? 'w-1/2' : 'w-full'} flex flex-col transition-all duration-300 border-r`}>
-          <div className="p-4 border-b bg-background">
+          <div className="p-4 border-b bg-background flex-shrink-0">
                   {/* Header with actions */}
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-bold">Inbox</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold">Inbox</h1>
+                {totalFetched > 0 && (
+                  <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
+                    {totalFetched}
+                  </span>
+                )}
+              </div>
                       <div className="flex items-center gap-2">
                 <Button
                   onClick={refreshEmails}
@@ -178,14 +213,16 @@ export default function EmailList() {
                 </Button>
               </div>
             </div>
+          </div>
 
-            <div className="bg-background border rounded-lg flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-auto bg-background border rounded-lg mx-4 mb-4">
                       {emails.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   No emails found
                 </div>
               ) : (
-                <div className="divide-y overflow-auto flex-1">
+                <>
+                  <div className="divide-y">
                               {emails.map((email) => (
                     <div
                       key={email.id}
@@ -230,22 +267,33 @@ export default function EmailList() {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-            
-            {nextPageToken && (
-              <div className="p-4 border-t">
-                <Button 
-                  onClick={loadMore} 
-                  disabled={loadingMore}
-                  variant="outline"
-                  className="w-full"
-                >
-                  {loadingMore ? 'Loading...' : 'Load More'}
-                </Button>
-              </div>
-            )}
-            </div>
+                  </div>
+                  
+                  {/* Load More or Status */}
+                  <div className="p-4 border-t">
+                    {nextPageToken ? (
+                      <Button 
+                        onClick={loadMore} 
+                        disabled={loadingMore}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {loadingMore ? 'Loading...' : 'Load More'}
+                      </Button>
+                    ) : (
+                      <div className="text-center text-sm text-muted-foreground">
+                        {totalFetched > 0 && `Loaded ${totalFetched} emails`}
+                        {backgroundFetching && (
+                          <div className="flex items-center justify-center gap-2 mt-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+                            <span>Loading more emails...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
           </div>
         </div>
 
